@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Image OCR</title>
+    <!-- Tesseract.js library for client-side OCR, loaded from a CDN -->
+    <script src='https://unpkg.com/tesseract.js@5.0.0/dist/tesseract.min.js'></script>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #0056b3; }
+        p { margin-bottom: 20px; text-align: center; max-width: 600px; }
+        #imageInput { margin-top: 10px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background-color: #fff; }
+        #image-container { max-width: 600px; max-height: 400px; overflow: hidden; border: 1px solid #ddd; margin-top: 20px; background-color: #fff; display: flex; justify-content: center; align-items: center; min-height: 150px; }
+        #selected-image { max-width: 100%; height: auto; display: none; /* Hidden until an image is selected */ }
+        #recognizeButton { padding: 10px 20px; font-size: 16px; margin-top: 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.3s ease; }
+        #recognizeButton:hover:not(:disabled) { background-color: #0056b3; }
+        #recognizeButton:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .status { margin-top: 15px; font-style: italic; color: #555; }
+        #result { width: 80%; max-width: 600px; min-height: 150px; border: 1px solid #ddd; padding: 15px; margin-top: 20px; white-space: pre-wrap; background-color: #fff; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+    <h1>Local Image OCR</h1>
+    <p>Select an image file to perform Optical Character Recognition (OCR) directly in your browser. All processing happens client-side, ensuring privacy.</p>
+
+    <input type="file" id="imageInput" accept="image/*">
+    <div id="image-container">
+        <img id="selected-image" src="" alt="Selected Image">
+    </div>
+    <button id="recognizeButton" disabled>Recognize Text</button>
+    <div class="status" id="status"></div>
+    <div id="result"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const imageInput = document.getElementById('imageInput');
+            const selectedImage = document.getElementById('selected-image');
+            const recognizeButton = document.getElementById('recognizeButton');
+            const resultDiv = document.getElementById('result');
+            const statusDiv = document.getElementById('status');
+
+            let imageFile = null;
+
+            imageInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    imageFile = file;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        selectedImage.src = e.target.result;
+                        selectedImage.style.display = 'block'; // Show image
+                        recognizeButton.disabled = false; // Enable button once image is loaded
+                        resultDiv.textContent = ''; // Clear previous result
+                        statusDiv.textContent = ''; // Clear status
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    imageFile = null;
+                    selectedImage.src = '';
+                    selectedImage.style.display = 'none'; // Hide image
+                    recognizeButton.disabled = true;
+                    resultDiv.textContent = '';
+                    statusDiv.textContent = '';
+                }
+            });
+
+            recognizeButton.addEventListener('click', async () => {
+                if (!imageFile) {
+                    alert('Please select an image first.');
+                    return;
+                }
+
+                recognizeButton.disabled = true;
+                resultDiv.textContent = '';
+                statusDiv.textContent = 'Initializing Tesseract.js worker...';
+
+                try {
+                    // Initialize Tesseract worker for local OCR
+                    const worker = await Tesseract.createWorker({
+                        logger: m => {
+                            // Provide real-time status updates to the user
+                            if (m.status === 'recognizing') {
+                                statusDiv.textContent = `Recognizing: ${Math.round(m.progress * 100)}%`;
+                            } else {
+                                statusDiv.textContent = m.status.charAt(0).toUpperCase() + m.status.slice(1) + '...';
+                            }
+                        }
+                    });
+
+                    // Load English language data and initialize the worker
+                    await worker.loadLanguage('eng');
+                    await worker.initialize('eng');
+
+                    // Perform OCR on the selected image file
+                    // This is the core concept: local, client-side text recognition without server interaction
+                    const { data: { text } } = await worker.recognize(imageFile);
+
+                    resultDiv.textContent = text; // Display the recognized text
+                    statusDiv.textContent = 'Recognition complete!';
+
+                    await worker.terminate(); // Clean up the worker to free resources
+                } catch (error) {
+                    console.error('OCR Error:', error);
+                    statusDiv.textContent = `Error during OCR: ${error.message}`;
+                    resultDiv.textContent = 'Failed to recognize text.';
+                } finally {
+                    recognizeButton.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
